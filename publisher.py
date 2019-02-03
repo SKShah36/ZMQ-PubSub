@@ -1,7 +1,7 @@
-import CS6381
-import os
+from CS6382 import ToBroker
 
-print(os.getpid())
-CS6381.register_pub("Temperature", os.getpid())
-CS6381.publish("Temperature", 15)
-CS6381.register_sub("Temperature", os.getpid())
+Broker_API = ToBroker()
+
+Broker_API.register_pub("Temperature")
+Broker_API.register_pub("Humidity")
+Broker_API.publish("Temperature", 15)
