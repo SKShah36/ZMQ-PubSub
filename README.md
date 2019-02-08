@@ -73,3 +73,24 @@ config.ini: The configuration is read from this file. You may change IP address 
 
 ### Performance Measurement
 
+#### Latency
+We calculate average latency vs message count(100 in each case) across three different configurations:
+1. Single publisher - Single subscriber
+
+    ![Alt text](./Performance_Measurement/CountvLatency_1x1.png?raw=true "CountvLatency-1x1") 
+       
+2. Two publishers - Single Subscriber
+
+    ![Alt text](./Performance_Measurement/CountvLatency_2x1.png?raw=true "CountvLatency-2x1")
+    
+3. One publisher - Ten subscribers
+
+    ![Alt text](./Performance_Measurement/CountvLatency_1x10.png?raw=true "CountvLatency-1x10") 
+    
+##### Observations
+- The first and second application show that there's an initial setup time overhead but once stabilized the latency keep decreasing until 
+a certain point
+- We have observed that as the number of publishers increases without subscribers the initial message latency can be very high. In some scenarios, this may exceed the threshold for heartbeat messages thus leading to unexpected removal of publishers and subscribers. This can be attributed to high production low consumption problem.
+- As the number of subscribers suddenly increase, the latency spikes but once stabilized it smoothens out.
+
+      
