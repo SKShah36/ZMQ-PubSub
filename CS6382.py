@@ -1,4 +1,4 @@
-from threading import Thread
+from threading import Thread, Lock
 from queue import Queue
 import time
 import zmq
@@ -16,11 +16,22 @@ class ToBroker:
         self.ip = config['IP']
 
         context = zmq.Context()
+
         self.pub_socket = context.socket(zmq.DEALER)
+        self.pub_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['RECEIVE']))
+
         self.sub_socket = context.socket(zmq.DEALER)
-        self.req_socket = context.socket(zmq.DEALER)
-        self.rep_socket = context.socket(zmq.REP)
+        self.sub_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['SEND']))
+
+        self.reqp_socket = context.socket(zmq.DEALER)
+        self.reqp_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['REGISTER_PUBLISHER']))
+
+        self.reqs_socket = context.socket(zmq.DEALER)
+        self.reqs_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['REGISTER_SUBSCRIBER']))
+
         self.heartbeat_socket = context.socket(zmq.DEALER)
+        self.heartbeat_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['HEARTBEAT']))
+
         self.pub_id = ""
         self.sub_id = ""
 
@@ -32,8 +43,7 @@ class ToBroker:
         self.pub_id = hash_obj.hexdigest()
 
         # Connect and send registration message to broker
-        self.req_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['REGISTER_PUBLISHER']))
-        self.req_socket.send_string("{}-{}".format(topic, self.pub_id))
+        self.reqp_socket.send_string("{}-{}".format(topic, self.pub_id))
 
         # Setup heartbeat thread
         heartbeat_thread = Thread(target=self.heartbeat, args=(self.pub_id,))
@@ -41,7 +51,7 @@ class ToBroker:
         heartbeat_thread.start()
 
         # Receive registration confirmation
-        return_msg = self.req_socket.recv()
+        return_msg = self.reqp_socket.recv()
         return_msg = return_msg.decode('utf-8')
         print("Return message: {}".format(return_msg))
 
@@ -53,8 +63,7 @@ class ToBroker:
         self.sub_id = hash_obj.hexdigest()
 
         # Connect and send registration message to broker
-        self.req_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['REGISTER_SUBSCRIBER']))
-        self.req_socket.send_string("{}-{}".format(topic, self.sub_id))
+        self.reqs_socket.send_string("{}-{}".format(topic, self.sub_id))
 
         # Setup heartbeat thread
         heartbeat_thread = Thread(target=self.heartbeat, args=(self.sub_id,))
@@ -62,13 +71,12 @@ class ToBroker:
         heartbeat_thread.start()
 
         # Receive registration confirmation
-        return_msg = self.req_socket.recv()
+        return_msg = self.reqs_socket.recv()
         return_msg = return_msg.decode('utf-8')
         print("Return message: {}".format(return_msg))
 
     # Connect and publish messages
     def publish(self, topic, value):
-        self.pub_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['RECEIVE']))
         top_val = "{},{}-{}".format(self.pub_id, topic, value)
         print("Publishing {}".format(top_val))
         self.pub_socket.send_string(top_val)
@@ -80,34 +88,27 @@ class ToBroker:
             print(msg_from_broker)
             time.sleep(5)
 
-    def notify(self, topic):
+    def notify(self, topic, callback_func):
 
         # Connect and send id to notify handler
-        self.sub_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['SEND']))
         top_id = "{},{}".format(self.sub_id, topic)
         self.sub_socket.send_string(top_id)
 
-        # Start a thread that receives messages sent by the broker asynchronously
-        notify_poll_thread = Thread(target=self.notify_poll())
-        notify_poll_thread.daemon = True
-        notify_poll_thread.start()
-
-    # Poll for messages from broker
-    def notify_poll(self):
+        self.sub_socket.setsockopt(zmq.RCVTIMEO, 5000)
         while True:
             print("Waiting for messages")
-            recv_value = self.sub_socket.recv()
-            print(recv_value)
+            try:
+                recv_value = self.sub_socket.recv()
+            except zmq.error.Again:
+                continue
             recv_value = recv_value.decode('utf-8')
             topic, val = recv_value.split('-')
-            print("Topic: {}, Value: {}".format(topic, val))
+            callback_func(topic, val)
+            time.sleep(2)
 
     def heartbeat(self, identity):
-        self.heartbeat_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['HEARTBEAT']))
-        print("Heartbeat started. Connected to 5509")
         while True:
             self.heartbeat_socket.send_string("{}".format(identity))
-            print("Sending string")
             time.sleep(10)
 
 
@@ -140,7 +141,7 @@ class FromBroker:
             topic, pub_id = top_id.split('-')
             self.discovery["publishers"][pub_id] = {"address": address, "topic": topic}
             self.discovery["id"][pub_id] = time.time()
-            print(self.discovery)
+            # print(self.discovery)
             self.pub_reg_socket.send_multipart(
                 [address, "{} is successfully registered".format(pub_id).encode('utf-8')])
             time.sleep(3)
@@ -163,11 +164,9 @@ class FromBroker:
     def receive_handler(self):
 
         while True:
-            print("Inside receive thread")
             address, msg = self.receiver_socket.recv_multipart()
             msg = msg.decode('utf-8')
             pub_id, top_val = msg.split(',')
-            # topic, value = top_val.split('-')
             print("Received message: {}".format(msg))
             if pub_id not in self.discovery["publishers"].keys():
                 print("Publisher isn't registered")
@@ -175,17 +174,13 @@ class FromBroker:
             else:
                 self.discovery["publishers"][pub_id]["address"] = address
                 self.queue.put(top_val)
-                print("Message put on queue")
 
     def send_handler(self):
 
         while True:
-            # print("Inside send thread")
             if self.discovery["subscribers"]:
                 top_val = self.queue.get()
                 topic, val = top_val.split('-')
-                print("Topic {}".format(topic))
-                print("Value {}".format(val))
 
                 for sub_id in self.discovery["subscribers"].keys():
                     if topic in self.discovery["subscribers"][sub_id]["topic"]:
@@ -210,13 +205,17 @@ class FromBroker:
         while True:
             if self.discovery["id"]:
                 delete_list = []
-                for identity in self.discovery["id"].keys():
-                    last_heartbeat = self.discovery["id"][identity]
-                    time_diff = int(round(time.time()-last_heartbeat))
+                lock = Lock()
+                lock.acquire()
+                try:
+                    for identity in self.discovery["id"].keys():
+                        last_heartbeat = self.discovery["id"][identity]
+                        time_diff = int(round(time.time()-last_heartbeat))
 
-                    if time_diff > 30:
-                        delete_list.append(identity)
-
+                        if time_diff > 30:
+                            delete_list.append(identity)
+                finally:
+                    lock.release()
                 for identity in delete_list:
                     try:
                         self.discovery["publishers"].pop(identity)
@@ -238,7 +237,6 @@ class FromBroker:
 
     def update_heartbeat(self):
             address, heartbeat_id = self.heartbeat_socket.recv_multipart()
-            print("Heartbeat received {}".format(heartbeat_id))
             heartbeat_recv_time = time.time()
             heartbeat_id = heartbeat_id.decode('utf-8')
 
