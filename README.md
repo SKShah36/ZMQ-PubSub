@@ -93,4 +93,9 @@ a certain point
 - We have observed that as the number of publishers increases without subscribers the initial message latency can be very high. In some scenarios, this may exceed the threshold for heartbeat messages thus leading to unexpected removal of publishers and subscribers. This can be attributed to high production low consumption problem.
 - As the number of subscribers suddenly increase, the latency spikes but once stabilized it smoothens out.
 
-      
+### Future work
+##### Performance Measurement
+   We plan to add several other performance monitoring parameters such as CPU utilization, Latency v/s Publisher and Latency v/s Subscriber to better gauge the performance of our application.
+
+##### Zookeeper
+   Use zookeeper to provide load balancing and fault tolerance as counter-measures against bottleneck conditions.           
