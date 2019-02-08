@@ -1,4 +1,4 @@
-from CS6382 import FromBroker
+from CS6381 import FromBroker
 
 broker = FromBroker()
 broker.run()
