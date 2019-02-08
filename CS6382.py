@@ -5,10 +5,16 @@ import zmq
 import hashlib
 import random
 import os
+import configparser
 
 
 class ToBroker:
     def __init__(self):
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+        self.ports = config['PORT']
+        self.ip = config['IP']
+
         context = zmq.Context()
         self.pub_socket = context.socket(zmq.DEALER)
         self.sub_socket = context.socket(zmq.DEALER)
@@ -26,7 +32,7 @@ class ToBroker:
         self.pub_id = hash_obj.hexdigest()
 
         # Connect and send registration message to broker
-        self.req_socket.connect("tcp://127.0.0.1:5512")
+        self.req_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['REGISTER_PUBLISHER']))
         self.req_socket.send_string("{}-{}".format(topic, self.pub_id))
 
         # Setup heartbeat thread
@@ -47,8 +53,13 @@ class ToBroker:
         self.sub_id = hash_obj.hexdigest()
 
         # Connect and send registration message to broker
-        self.req_socket.connect("tcp://127.0.0.1:5513")
+        self.req_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['REGISTER_SUBSCRIBER']))
         self.req_socket.send_string("{}-{}".format(topic, self.sub_id))
+
+        # Setup heartbeat thread
+        heartbeat_thread = Thread(target=self.heartbeat, args=(self.sub_id,))
+        heartbeat_thread.daemon = True
+        heartbeat_thread.start()
 
         # Receive registration confirmation
         return_msg = self.req_socket.recv()
@@ -57,7 +68,7 @@ class ToBroker:
 
     # Connect and publish messages
     def publish(self, topic, value):
-        self.pub_socket.connect("tcp://127.0.0.1:5510")
+        self.pub_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['RECEIVE']))
         top_val = "{},{}-{}".format(self.pub_id, topic, value)
         print("Publishing {}".format(top_val))
         self.pub_socket.send_string(top_val)
@@ -72,7 +83,7 @@ class ToBroker:
     def notify(self, topic):
 
         # Connect and send id to notify handler
-        self.sub_socket.connect("tcp://127.0.0.1:5511")
+        self.sub_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['SEND']))
         top_id = "{},{}".format(self.sub_id, topic)
         self.sub_socket.send_string(top_id)
 
@@ -86,12 +97,13 @@ class ToBroker:
         while True:
             print("Waiting for messages")
             recv_value = self.sub_socket.recv()
+            print(recv_value)
             recv_value = recv_value.decode('utf-8')
             topic, val = recv_value.split('-')
             print("Topic: {}, Value: {}".format(topic, val))
 
     def heartbeat(self, identity):
-        self.heartbeat_socket.connect("tcp://127.0.0.1:5509")
+        self.heartbeat_socket.connect("tcp://{}:{}".format(self.ip['BROKER_IP'], self.ports['HEARTBEAT']))
         print("Heartbeat started. Connected to 5509")
         while True:
             self.heartbeat_socket.send_string("{}".format(identity))
@@ -102,21 +114,22 @@ class ToBroker:
 class FromBroker:
 
     def __init__(self):
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+        ports = config['PORT']
         broker_context = zmq.Context()
         self.pub_reg_socket = broker_context.socket(zmq.ROUTER)   # Socket to register request from publisher
-        self.pub_reg_socket.bind("tcp://*:5512")
+        self.pub_reg_socket.bind("tcp://*:{}".format(ports['REGISTER_PUBLISHER']))
         self.sub_reg_socket = broker_context.socket(zmq.ROUTER)   # Socket to register request from subscriber
-        self.sub_reg_socket.bind("tcp://*:5513")
+        self.sub_reg_socket.bind("tcp://*:{}".format(ports['REGISTER_SUBSCRIBER']))
         self.sender_socket = broker_context.socket(zmq.ROUTER)    # Socket to send messages from publisher to subscriber
-        self.sender_socket.bind("tcp://*:5511")
+        self.sender_socket.bind("tcp://*:{}".format(ports['SEND']))
         self.receiver_socket = broker_context.socket(zmq.ROUTER)  # Socket to receive messages from publisher
-        self.receiver_socket.bind("tcp://*:5510")
+        self.receiver_socket.bind("tcp://*:{}".format(ports['RECEIVE']))
         self.heartbeat_socket = broker_context.socket(zmq.ROUTER)
-        self.heartbeat_socket.bind("tcp://*:5509")
+        self.heartbeat_socket.bind("tcp://*:{}".format(ports['HEARTBEAT']))
         self.discovery = {"publishers": {}, "subscribers": {}, "id": {}}
         self.queue = Queue()
-
-    # def heartbeat_handler(self):
 
     def register_publisher_handler(self):
 
@@ -172,7 +185,7 @@ class FromBroker:
                 top_val = self.queue.get()
                 topic, val = top_val.split('-')
                 print("Topic {}".format(topic))
-                print("Value {}".format(topic))
+                print("Value {}".format(val))
 
                 for sub_id in self.discovery["subscribers"].keys():
                     if topic in self.discovery["subscribers"][sub_id]["topic"]:
@@ -201,7 +214,7 @@ class FromBroker:
                     last_heartbeat = self.discovery["id"][identity]
                     time_diff = int(round(time.time()-last_heartbeat))
 
-                    if time_diff > 20:
+                    if time_diff > 30:
                         delete_list.append(identity)
 
                 for identity in delete_list:
