@@ -77,7 +77,7 @@ class ToBroker:
 
     # Connect and publish messages
     def publish(self, topic, value):
-        top_val = "{},{}-{}".format(self.pub_id, topic, value)
+        top_val = "{},{}-{}:{}".format(self.pub_id, topic, value, time.time())
         print("Publishing {}".format(top_val))
         self.pub_socket.send_string(top_val)
 
@@ -95,21 +95,44 @@ class ToBroker:
         self.sub_socket.send_string(top_id)
 
         self.sub_socket.setsockopt(zmq.RCVTIMEO, 5000)
-        while True:
-            print("Waiting for messages")
-            try:
-                recv_value = self.sub_socket.recv()
-            except zmq.error.Again:
-                continue
-            recv_value = recv_value.decode('utf-8')
-            topic, val = recv_value.split('-')
-            callback_func(topic, val)
-            time.sleep(2)
+        count = 0
+        current_average = 0
+
+        f = open("latency_data_1x10-{}.csv".format(os.getpid()), "w+")
+        f.write("Count,Time difference,Running average latency\n")
+        try:
+            while True:
+                print("Waiting for messages")
+                try:
+                    recv_value = self.sub_socket.recv()
+                except zmq.error.Again:
+                    continue
+                recv_value = recv_value.decode('utf-8')
+                topic, val = recv_value.split('-')
+                val, sent_time = val.split(':')
+                callback_func(topic, val)
+                recv_time = time.time()
+                print("Received time: {}, Sent time {}".format(recv_time, sent_time))
+                time_diff = recv_time - float(sent_time)
+            # Calculate average latency
+                count = count + 1
+                current_average = self.average_latency(sent_time, recv_time, current_average, count)
+                print("Current latency: {}\nTime diff: {}\n".format(current_average, time_diff))
+                f.write("{},{},{}\n".format(count, time_diff, current_average))
+                time.sleep(2)
+
+        except KeyboardInterrupt:
+            f.close()
 
     def heartbeat(self, identity):
         while True:
             self.heartbeat_socket.send_string("{}".format(identity))
             time.sleep(10)
+
+    def average_latency(self, sent_time, recv_time, current_average, count):
+        time_diff = recv_time - float(sent_time)
+        average = ((count-1)*current_average + time_diff)/count
+        return average
 
 
 class FromBroker:
@@ -212,7 +235,7 @@ class FromBroker:
                         last_heartbeat = self.discovery["id"][identity]
                         time_diff = int(round(time.time()-last_heartbeat))
 
-                        if time_diff > 30:
+                        if time_diff > 60:
                             delete_list.append(identity)
                 finally:
                     lock.release()
