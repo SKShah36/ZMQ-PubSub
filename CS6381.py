@@ -234,8 +234,8 @@ class FromBroker:
                     for identity in self.discovery["id"].keys():
                         last_heartbeat = self.discovery["id"][identity]
                         time_diff = int(round(time.time()-last_heartbeat))
-
-                        if time_diff > 60:
+                        threshold = 60 + 10*(len(self.discovery["id"]))
+                        if time_diff > threshold:
                             delete_list.append(identity)
                 finally:
                     lock.release()
