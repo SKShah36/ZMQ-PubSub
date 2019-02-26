@@ -54,6 +54,40 @@ class ToBroker:
         hash_obj_sub.update("{}{}".format(random.randint(1, 99999), os.getpid()).encode())
         self.sub_id = hash_obj_sub.hexdigest()
 
+        self.watch_var = False
+        self.disconnected = False
+
+        @self.zk.DataWatch("/app/broker/leader/ip")
+        def watch_node(data, stat):
+            print("Watch triggered")
+            if self.zk.exists("/app/broker/leader/ip"):
+                if self.watch_var:
+
+                    try:
+                        if not self.disconnected:
+                            self.pub_socket.disconnect("tcp://{}:{}".format(self.broker_ip, self.connection_port_pub))
+                            self.disconnected = True
+                        self.connect2broker(0)
+
+                    except zmq.error.ZMQError:
+                        pass
+
+                    try:
+                        if not self.disconnected:
+                            self.sub_socket.disconnect("tcp://{}:{}".format(self.broker_ip, self.connection_port_sub))
+                            self.disconnected = True
+                        self.connect2broker(1)
+                        self.send_subscriber_address()
+                    except zmq.error.ZMQError:
+                        pass
+
+                else:
+                    self.watch_var = True
+                    print("Watch Triggered first time")
+
+            else:
+                print("No brokers available")
+
     def state_listener(self, state):
         if state == KazooState.LOST:
             print("Current state is now = LOST")
@@ -68,10 +102,10 @@ class ToBroker:
     def register_pub(self, topic):
         # Create a publisher node
         try:
+
             self.zk.ensure_path("/app/publishers/{}".format(self.pub_id))
             self.zk.create("/app/publishers/{}/{}".format(self.pub_id, topic), "{}".format(topic).encode('utf-8'),
                            ephemeral=True)
-            print("Subscriber has already been registered with the topic".format(topic))
             self.connect2broker(0)
 
         except kazoo.exceptions.NodeExistsError:
@@ -94,26 +128,44 @@ class ToBroker:
             print("Subscriber has already been registered with the topic".format(topic))
 
     def connect2broker(self, i):
-        try:
-            self.broker_ip = self.zk.get("/app/broker/leader/ip")
-            self.broker_ip = self.broker_ip[0].decode('utf-8')
-            print("Current broker ip", self.broker_ip)
 
-            self.connection_port_pub = self.zk.get("/app/broker/leader/publish_handle")
-            self.connection_port_pub = self.connection_port_pub[0].decode('utf-8')
-            print("Current pub port", self.connection_port_pub)
+        if self.zk.exists("/app/broker/leader/ip"):
+            time.sleep(1) # Give some time to broker to create nodes
+            try:
+                self.broker_ip = self.zk.get("/app/broker/leader/ip")
+                self.broker_ip = self.broker_ip[0].decode('utf-8')
+                print("Current broker ip", self.broker_ip)
 
-            self.connection_port_sub = self.zk.get("/app/broker/leader/subscribe_handle")
-            self.connection_port_sub = self.connection_port_sub[0].decode('utf-8')
+            except kazoo.exceptions.NoNodeError:
+                print("There's no broker available right now") # This is redundant
 
-        except kazoo.exceptions.NoNodeError:
-            print("There's no broker available right now")
-        if i == 0:
-            self.pub_socket.connect("tcp://{}:{}".format(self.broker_ip, self.connection_port_pub))
-        elif i == 1:
-            self.sub_socket.connect("tcp://{}:{}".format(self.broker_ip, self.connection_port_sub))
+            if i == 0:
+                try:
+                    self.connection_port_pub = self.zk.get("/app/broker/leader/publish_handle")
+                    self.connection_port_pub = self.connection_port_pub[0].decode('utf-8')
+                    print("Current pub port", self.connection_port_pub)
+                    self.pub_socket.connect("tcp://{}:{}".format(self.broker_ip, self.connection_port_pub))
 
-    # Connect and publish messages
+                except kazoo.exceptions.NoNodeError:
+                    print("There's no publisher")
+
+            if i == 1:
+                try:
+                    self.connection_port_sub = self.zk.get("/app/broker/leader/subscribe_handle")
+                    self.connection_port_sub = self.connection_port_sub[0].decode('utf-8')
+                    print("Current sub port", self.connection_port_sub)
+                    self.sub_socket.connect("tcp://{}:{}".format(self.broker_ip, self.connection_port_sub))
+                    print("Subscriber reconnected")
+
+                except kazoo.exceptions.NoNodeError:
+                    print("There's no subscriber")
+
+            self.disconnected = False # Since connection has been established
+
+        else:
+            print("No leaders yet")
+
+    # Publish messages
     def publish(self, topic, value):
         try:
             if not self.zk.exists("/app/publishers/{}".format(self.pub_id)):
@@ -135,26 +187,19 @@ class ToBroker:
             self.zk.delete("/app/publishers/{}".format(self.pub_id)) # This is working but what happens if there's a power failure
             self.zk.stop()
 
-    def watch_broker(self, events=None):
-        self.pub_socket.disconnect("tcp://{}:{}".format(self.broker_ip, self.connection_port_pub))
-        self.sub_socket.disconnect("tcp://{}:{}".format(self.broker_ip, self.connection_port_sub))
-
-        self.connect2broker(0)
-        self.connect2broker(1)
-
-    # Check for notification from broker, if any
-    def publish_helper(self):
-        while True:
-            msg_from_broker = self.pub_socket.recv_string()
-            print(msg_from_broker)
-            time.sleep(5)
+    def send_subscriber_address(self):
+        topic = self.zk.get_children("/app/subscribers/{}".format(self.sub_id))[0]
+        top_id = "{},{}".format(self.sub_id, topic)
+        print("Trying to send {}".format(top_id))
+        self.sub_socket.send_string(top_id)
 
     def notify(self, topic, callback_func):
 
-        # Connect and send id to notify handler
-        top_id = "{},{}".format(self.sub_id, topic)
-        self.sub_socket.send_string(top_id)
+        if topic not in self.zk.get_children("/app/subscribers/{}".format(self.sub_id)):
+            print("Topic not registered so cannot be notified")
 
+        # Connect and send id to notify handler
+        self.send_subscriber_address()
         self.sub_socket.setsockopt(zmq.RCVTIMEO, 5000)
         count = 0
         current_average = 0
@@ -163,10 +208,10 @@ class ToBroker:
         f.write("Count,Time difference,Running average latency\n")
         try:
             while True:
-                print("Waiting for messages")
                 try:
                     recv_value = self.sub_socket.recv()
                 except zmq.error.Again:
+                    # print("Waiting for messages")
                     continue
                 recv_value = recv_value.decode('utf-8')
                 topic, val = recv_value.split('-')
@@ -199,11 +244,16 @@ class ToBroker:
 
 
 class FromBroker:
-    def __init__(self, my_ip='127.0.0.1'):
+    def __init__(self, configuration='config.ini'):
         config = configparser.ConfigParser()
-        config.read('config.ini')
-        self.ports = config['PORT']
-        self.ip = config['IP']['BROKER_IP']
+        try:
+            config.read(configuration)
+            self.ports = config['PORT']
+            self.ip = config['IP']['BROKER_IP']
+
+        except KeyError:
+            print("Invalid configuration file")
+            sys.exit(1)
 
         self.receiver_socket = ""
         self.sender_socket = ""
@@ -297,6 +347,7 @@ class FromBroker:
             if self.zk.exists("/app/subscribers/"):
                 for sub_id in self.zk.get_children("/app/subscribers"):
                     if topic in self.zk.get_children("/app/subscribers/{}".format(sub_id)):
+                        print("Topics {}".format(topic))
 
                         if self.zk.exists("/app/subscribers/{}/address".format(sub_id)):
                             address = self.zk.get("/app/subscribers/{}/address".format(sub_id))
@@ -306,6 +357,7 @@ class FromBroker:
 
                         else:
                             time.sleep(1)
+                            print("No subscriber address node")
                             continue
 
             else:
@@ -323,7 +375,12 @@ class FromBroker:
             if self.zk.exists("/app/subscribers/{}/{}".format(sub_id, topic)):
                 print("Subid added")
                 try:
-                    self.zk.create("/app/subscribers/{}/address".format(sub_id), address, ephemeral=True)
+                    if self.zk.exists("/app/subscribers/{}/address".format(sub_id)):
+                        print("Address exists. Resetting the address")
+                        self.zk.set("/app/subscribers/{}/address".format(sub_id), address)
+                    else:
+                        print("Doesn't exist. Recreating the node")
+                        self.zk.create("/app/subscribers/{}/address".format(sub_id), address)
                 except kazoo.exceptions.NodeExistsError:
                     print("Cannot use notify more than once")
 
@@ -346,6 +403,7 @@ class FromBroker:
         t1.join()
         t2.join()
         t3.join()
+
 
 
 
