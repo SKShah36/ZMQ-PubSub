@@ -87,6 +87,21 @@ class ToBroker:
 
             else:
                 print("No brokers available")
+                try:
+                    if not self.disconnected:
+                        self.pub_socket.disconnect("tcp://{}:{}".format(self.broker_ip, self.connection_port_pub))
+                        self.disconnected = True
+
+                except zmq.error.ZMQError:
+                    pass
+
+                try:
+                    if not self.disconnected:
+                        self.sub_socket.disconnect("tcp://{}:{}".format(self.broker_ip, self.connection_port_sub))
+                        self.disconnected = True
+
+                except zmq.error.ZMQError:
+                    pass
 
     def state_listener(self, state):
         if state == KazooState.LOST:
@@ -280,6 +295,23 @@ class FromBroker:
             print("Connection to the zookeeper cannot be established.\nEnsure zookeeper is running.\nExiting...")
             sys.exit(0)
 
+        self.wait_var = True
+
+        if self.zk.exists("/app/broker/leader/ip"):
+            @self.zk.DataWatch("/app/broker/leader/ip")
+            def watch_node(data, stat):
+                print("Watch triggered")
+                print("wait variable {}".format(self.wait_var))
+                if self.zk.exists("/app/broker/leader/ip") and self.wait_var:
+                    self.wait_var = True
+
+                else:
+                    time.sleep(2)
+                    self.create_broker()
+
+        else:
+            pass
+
     def state_listener(self, state):
         if state == KazooState.LOST:
             print("Current state is now = LOST")
@@ -292,24 +324,41 @@ class FromBroker:
 
     def create_broker(self, events=None):
         try:
+            print("Creating a broker")
             self.zk.create("/app/broker/leader/ip", "{}".format(self.ip).encode('utf-8'), ephemeral=True)
             self.zk.create("/app/broker/leader/publish_handle", "{}".format(self.ports['RECEIVE']).encode('utf-8'), ephemeral=True)
             self.zk.create("/app/broker/leader/subscribe_handle", "{}".format(self.ports['SEND']).encode('utf-8'), ephemeral=True)
             print("Broker created with IP {}".format(self.ip))
+            self.wait_var = False
 
         except kazoo.exceptions.NodeExistsError:
-            self.zk.exists("/app/broker/leader/ip", watch=self.create_broker)
+            print("Broker cannot be created")
+            number = random.randint(0, 5)
+
+            while True:
+                print("wait variable {}".format(self.wait_var))
+                if self.zk.exists("/app/broker/leader/ip") and self.wait_var:
+                    print("Waiting {}".format(number))
+                    time.sleep(10)
+                else:
+                    break
 
     def setup_broker(self):
 
         broker_context = zmq.Context()
-
         self.receiver_socket = broker_context.socket(zmq.ROUTER)  # Socket to receive messages from publisher
-        self.receiver_socket.bind("tcp://*:{}".format(self.ports['RECEIVE']))
-
         self.sender_socket = broker_context.socket(zmq.ROUTER)  # Socket to send messages from publisher to subscriber
-        self.sender_socket.bind("tcp://*:{}".format(self.ports['SEND']))
+        counter = 0
+        while counter < 10:
+            counter += 1
+            try:
+                self.receiver_socket.bind("tcp://*:{}".format(self.ports['RECEIVE']))
+                self.sender_socket.bind("tcp://*:{}".format(self.ports['SEND']))
 
+            except zmq.error.ZMQError:
+                time.sleep(1)
+                continue
+        print("Broker setup")
         self.queue = Queue()
 
     def publisher_handler(self):
@@ -386,23 +435,27 @@ class FromBroker:
 
     def run(self):
 
-        self.create_broker()
-        self.setup_broker()
-        t1 = Thread(target=self.publisher_handler)
-        t2 = Thread(target=self.send_handler)
-        t3 = Thread(target=self.update_subscriber_address)
+        try:
+            self.create_broker()
+            self.setup_broker()
+            t1 = Thread(target=self.publisher_handler)
+            t2 = Thread(target=self.send_handler)
+            t3 = Thread(target=self.update_subscriber_address)
 
-        t1.start()
-        t2.start()
-        t3.start()
+            t1.start()
+            t2.start()
+            t3.start()
 
-        while True:
-            print("...")
-            time.sleep(3)
-
-        t1.join()
-        t2.join()
-        t3.join()
+            while True:
+                print("...")
+                time.sleep(3)
+        except KeyboardInterrupt:
+            print("Caught inteeesdscs")
+            self.receiver_socket.close()
+            self.sender_socket.close()
+            t1.join()
+            t2.join()
+            t3.join()
 
 
 
