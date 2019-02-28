@@ -220,10 +220,10 @@ class ToBroker:
         count = 0
         current_average = 0
 
-        complete_path = self.ensure_dir()
-
+        # Uncomment the following three lines and line 245 to generate logs
+        '''complete_path = self.ensure_dir()
         f = open(complete_path, "w+")
-        f.write("Count,Time difference,Running average latency\n")
+        f.write("Count,Time difference,Running average latency\n")'''
         try:
             while True:
                 try:
@@ -242,7 +242,7 @@ class ToBroker:
                 count = count + 1
                 current_average = self.average_latency(sent_time, recv_time, current_average, count)
                 print("Current latency: {}\nTime diff: {}\n".format(current_average, time_diff))
-                f.write("{},{},{}\n".format(count, time_diff, current_average))
+                # f.write("{},{},{}\n".format(count, time_diff, current_average))  #Uncomment to generate logs
                 time.sleep(0.5)
 
         except KeyboardInterrupt:
@@ -251,7 +251,7 @@ class ToBroker:
             self.zk.stop()
 
     def ensure_dir(self):
-        test_log_name = "latency_data_10x1"
+        test_log_name = "latency_data_1x10"
         path = os.getcwd()
         complete_path = "{}/Performance_Measurement/Performance_Log/{}/{}-{}.csv".format(path, test_log_name,
                                                                                          test_log_name, os.getpid())

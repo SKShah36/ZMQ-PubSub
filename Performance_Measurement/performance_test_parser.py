@@ -30,13 +30,13 @@ def csvread(filename):
                 time_difference.append(float(row[1]))
                 average_latency.append(float(row[2]))
 
-            if len(message_count) == 400:
+            if len(message_count) == 100:
                 break
 
     return message_count, average_latency[len(average_latency)-1], average_latency
 
 
-directory = "{}/Performance_Log/latency_data_10x1".format(os.getcwd())
+directory = "{}/Performance_Log/latency_data_1x10".format(os.getcwd())
 csv_files = []
 for filename in os.listdir(directory):
     if filename.endswith(".csv"):
@@ -57,7 +57,7 @@ for files in csv_files:
 max_latency = max(latency.keys())
 our_message_count = latency[max_latency][0]
 our_average_latency_list = latency[max_latency][1]
-count_vs_latency(10, 1)
+count_vs_latency(1, 10)
 
 
 
