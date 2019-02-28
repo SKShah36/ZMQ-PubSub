@@ -1,5 +1,5 @@
 # ZMQ PubSub Wrapper
-This project provides a wrapper around zmq APIs for publish-subscribe application
+This project provides a wrapper around zmq APIs for publish-subscribe application with zookeeper.
 
 ## About
 This is a simplified version built upon zmq which provides easy to use APIs to facilitate development of publish-subscribe
