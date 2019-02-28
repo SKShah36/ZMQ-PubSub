@@ -80,7 +80,7 @@ We calculate average latency vs message count(100 in each case) across three dif
      ![Alt text](./Performance_Measurement/Performance_Log/latency_data_10x10/10x10.png?raw=true "CountvLatency-10x10")
     
 ##### Observations
-1. In the 
+1. In the first graph for single publisher and ten subscribers we can observe that with number of subscribers greater than that of publishers latency drops sharply and continues to decrease gradually from there on.
 2. In the second graph for single publisher and hundred subscribers we can observe that as initially there are jitters but once the message count increases and the application stabilizes, the latency gradually decreases and hence the curve smoothens out.
 3. From the third graph for ten publishers and single subscribers it is evident that the latency increases linearly as the message count increases.
 4. From the fourth graph for ten publishers and ten subscribers it is evident that the latency increases linearly as the message count increases.
