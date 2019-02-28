@@ -1,25 +1,17 @@
 # ZMQ PubSub Wrapper
-This project provides a wrapper around zmq APIs for publish-subscribe application with zookeeper.
-
-## About
-This is a simplified version built upon zmq which provides easy to use APIs to facilitate development of publish-subscribe
-applications. We provide four APIs for the same.
-
-1. register_pub(topic): Registers the publisher with the broker for a topic
-2. register_sub(topic): Registers the subscriber with the broker for a topic
-3. publish(topic, value): Once registered with a topic, publish values on the topic
-4. notify(topic): Calls a callback object when matching topic is found
+This project provides a wrapper around zmq APIs for publish-subscribe application with zookeeper facilities.
 
 ## Implementation
-In our approach the broker is a sole entity that manages incoming messages from the registered
-publishers and relays them to the registered subscribers with the topic. 
+In our approach the zookeeper coordinates the communication between the brokers, publishers and subsciribers. From the various brokers, a single broker acquires the lock to create the leader node while the other brokers wait. When the leader broker dies, the zookeeper allows one of the remaining brokers to become the leader.
 
-#### Broker responsibilities:
-1. Register requests from publishers and subscribers.
-2. Handle incoming messages, provide a discovery service and relay information.
-3. Handle heartbeat and manage dead clients.
+#### Zookeeper responsibilities:
+1. Appoints a leader broker.
+2. Maintains meta-data for all the brokers, publishers and subscribers.
+3. Uses watch-mechanism to monitor live status of all the nodes.
 
 ## Installation
+To clone only this branch: 
+'''git clone -b zookeeper --single-branch https://github.com/SKShah36/ZMQ-PubSub.git '''
 Assuming you have cloned the repository.
 
 - Navigate to root directory
@@ -29,6 +21,14 @@ pip3 install -r requirements.txt
 ```
 
 ## How to run?
+### Start Zookeeper Server
+
+For download and install instructions go to [zookeeper](https://zookeeper.apache.org/releases.html)
+- To start the zookeeper navigate to the zookeeper directory (eg. zookeeper-3.4.12)
+- '''bin/zkServer.sh start'''. This command starts the zookeeper server. Make sure the port in the configuration file is 2181.
+
+### Application
+
 The main library is called CS6381.py We provide three sample applications: broker.py,
 publisher.py and subscriber.py which uses this library:
 
@@ -45,6 +45,7 @@ topic. It accepts a command-ine argument for the topic.
 To run the publisher.py:
 
 ```python3 publisher.py <topicname>```
+For eg. '''python3 publisher.py Temperature'''
 
 subscriber.py: The subscriber application also uses ToBroker class and calls on two APIs, namely
 register_sub and notify. It also accepts a command-line argument for the topic.
@@ -71,31 +72,39 @@ config.ini: The configuration is read from this file. You may change IP address 
 3. Two publishers in one application single subscriber. The applications are under ```Tests``` folder.
 4. Single Publisher - N Subscribers
 
-### Performance Measurement
+### Performance Test
 
 #### Latency
 We calculate average latency vs message count(100 in each case) across three different configurations:
-1. Single publisher - Single subscriber
+1. Single publisher - Ten subscribers
 
-    ![Alt text](./Performance_Measurement/CountvLatency_1x1.png?raw=true "CountvLatency-1x1") 
+    ![Alt text](./Performance_Measurement/Performance_Log/latency_data_1x10/1x10.png?raw=true "CountvLatency-1x10") 
        
-2. Two publishers - Single Subscriber
+2. Single publisher - Hundred Subscribers
 
-    ![Alt text](./Performance_Measurement/CountvLatency_2x1.png?raw=true "CountvLatency-2x1")
+     ![Alt text](./Performance_Measurement/Performance_Log/latency_data_1x100/1x100.png?raw=true "CountvLatency-1x100") 
     
-3. One publisher - Ten subscribers
+3. Ten publishers - single subscriber
 
-    ![Alt text](./Performance_Measurement/CountvLatency_1x10.png?raw=true "CountvLatency-1x10") 
+     ![Alt text](./Performance_Measurement/Performance_Log/latency_data_10x1/10x1.png?raw=true "CountvLatency-10x1") 
+     
+4. Ten publishers - Ten subscribers
+
+     ![Alt text](./Performance_Measurement/Performance_Log/latency_data_10x10/10x10.png?raw=true "CountvLatency-10x10")
     
 ##### Observations
-- The first and second application show that there's an initial setup time overhead but once stabilized the latency keep decreasing until 
-a certain point
-- We have observed that as the number of publishers increases without subscribers the initial message latency can be very high. In some scenarios, this may exceed the threshold for heartbeat messages thus leading to unexpected removal of publishers and subscribers. This can be attributed to high production low consumption problem.
-- As the number of subscribers suddenly increase, the latency spikes but once stabilized it smoothens out.
+1. In the 
+2. In the second graph for single publisher and hundred subscribers we can observe that as initially there are jitters but once the message count increases and the application stabilizes, the latency gradually decreases and hence the curve smoothens out.
+3. From the third graph for ten publishers and single subscribers it is evident that the latency increases linearly as the message count increases.
+4. From the fourth graph for ten publishers and ten subscribers it is evident that the latency increases linearly as the message count increases.
+
+This behaviour is analogous to the High Production - Low Consumption Problem.
 
 ### Future work
 ##### Performance Measurement
    We plan to add several other performance monitoring parameters such as CPU utilization, Latency v/s Publisher and Latency v/s Subscriber to better gauge the performance of our application.
 
-##### Zookeeper
-   Use zookeeper to provide load balancing and fault tolerance as counter-measures against bottleneck conditions.           
+##### Ownership Strength
+   The information from the publisher with the highest ownership strength gets relayed to the subscribers.
+##### History
+   Store the last N-messages published on a topic.
