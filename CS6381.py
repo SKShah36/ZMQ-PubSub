@@ -10,6 +10,7 @@ import random
 import os
 import configparser
 import sys
+import errno
 
 
 class ToBroker:
@@ -219,7 +220,9 @@ class ToBroker:
         count = 0
         current_average = 0
 
-        f = open("latency_data_1x10-{}.csv".format(os.getpid()), "w+")
+        complete_path = self.ensure_dir()
+
+        f = open(complete_path, "w+")
         f.write("Count,Time difference,Running average latency\n")
         try:
             while True:
@@ -240,17 +243,27 @@ class ToBroker:
                 current_average = self.average_latency(sent_time, recv_time, current_average, count)
                 print("Current latency: {}\nTime diff: {}\n".format(current_average, time_diff))
                 f.write("{},{},{}\n".format(count, time_diff, current_average))
-                time.sleep(2)
+                time.sleep(0.5)
 
         except KeyboardInterrupt:
             f.close()
             self.zk.delete("/app/subscribers/{}".format(self.sub_id))
             self.zk.stop()
 
-    def heartbeat(self, identity):
-        while True:
-            self.heartbeat_socket.send_string("{}".format(identity))
-            time.sleep(10)
+    def ensure_dir(self):
+        test_log_name = "latency_data_10x1"
+        path = os.getcwd()
+        complete_path = "{}/Performance_Measurement/Performance_Log/{}/{}-{}.csv".format(path, test_log_name,
+                                                                                         test_log_name, os.getpid())
+
+        if not os.path.exists(os.path.dirname(test_log_name)):
+            try:
+                os.makedirs(os.path.dirname(complete_path))
+            except OSError as exc:  # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
+
+        return complete_path
 
     def average_latency(self, sent_time, recv_time, current_average, count):
         time_diff = recv_time - float(sent_time)
@@ -306,7 +319,7 @@ class FromBroker:
                     self.wait_var = True
 
                 else:
-                    time.sleep(2)
+                    time.sleep(1)
                     self.create_broker()
 
         else:
@@ -411,7 +424,7 @@ class FromBroker:
 
             else:
                 print("No subscribers yet")
-                time.sleep(2)
+                time.sleep(1)
                 continue
 
     def update_subscriber_address(self):
