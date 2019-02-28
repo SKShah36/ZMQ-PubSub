@@ -11,7 +11,7 @@ In our approach the zookeeper coordinates the communication between the brokers,
 
 ## Installation
 To clone only this branch: 
-'''git clone -b zookeeper --single-branch https://github.com/SKShah36/ZMQ-PubSub.git '''
+```git clone -b zookeeper --single-branch https://github.com/SKShah36/ZMQ-PubSub.git ```
 Assuming you have cloned the repository.
 
 - Navigate to root directory
@@ -25,7 +25,7 @@ pip3 install -r requirements.txt
 
 For download and install instructions go to [zookeeper](https://zookeeper.apache.org/releases.html)
 - To start the zookeeper navigate to the zookeeper directory (eg. zookeeper-3.4.12)
-- '''bin/zkServer.sh start'''. This command starts the zookeeper server. Make sure the port in the configuration file is 2181.
+- ```bin/zkServer.sh start```. This command starts the zookeeper server. Make sure the port in the configuration file is 2181.
 
 ### Application
 
@@ -37,7 +37,7 @@ broker.py: It instantiates an object of class FromBroker from our main library a
 
 To run the broker <br/>
 ```python3 broker.py <configuration>```
-For e.g. '''python3 broker.py config.ini'''  
+For e.g. ```python3 broker.py config.ini```  
 
 publisher.py: It imports a ToBroker class which exposes the above mentioned APIs. The publisher
 application uses two APIs register_pub and publish to register and publish values over the registered
@@ -46,7 +46,7 @@ topic. It accepts a command-ine argument for the topic.
 To run the publisher.py:
 
 ```python3 publisher.py <topicname>```
-For e.g. '''python3 publisher.py Temperature'''
+For e.g. ```python3 publisher.py Temperature```
 
 subscriber.py: The subscriber application also uses ToBroker class and calls on two APIs, namely
 register_sub and notify. It also accepts a command-line argument for the topic.
