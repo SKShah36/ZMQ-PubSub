@@ -25,7 +25,7 @@ pip3 install -r requirements.txt
 
 For download and install instructions go to [zookeeper](https://zookeeper.apache.org/releases.html)
 - To start the zookeeper navigate to the zookeeper directory (eg. zookeeper-3.4.12)
-- '''bin/zkServer.sh start'''. This command starts the zookeeper server. Make sure the port in the configuration file is 2181.
+- ``` bin/zkServer.sh start ```. This command starts the zookeeper server. Make sure the port in the configuration file is 2181.
 
 ### Application
 
@@ -45,7 +45,7 @@ topic. It accepts a command-ine argument for the topic.
 To run the publisher.py:
 
 ```python3 publisher.py <topicname>```
-For eg. '''python3 publisher.py Temperature'''
+For eg. ```python3 publisher.py Temperature```
 
 subscriber.py: The subscriber application also uses ToBroker class and calls on two APIs, namely
 register_sub and notify. It also accepts a command-line argument for the topic.
