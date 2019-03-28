@@ -31,18 +31,18 @@ For download and install instructions go to [zookeeper](https://zookeeper.apache
 
 ### Start InfluxDB
 
-We have used InfluxDB to implement the history service in our application. Use the following instructions to download and install the InfluxDB for Ubuntu: 
-```curl -sL https://repos.influxdata.com/influxdb.key | sudo apt-key add -```
-```source /etc/lsb-release```
-```echo "deb https://repos.influxdata.com/${DISTRIB_ID,,} ${DISTRIB_CODENAME} stable" | sudo tee /etc/apt/sources.list.d/influxdb.list```
+We have used InfluxDB to implement the history service in our application. Use the following instructions to download and install the InfluxDB for Ubuntu: <br/>
+```curl -sL https://repos.influxdata.com/influxdb.key | sudo apt-key add -```<br/>
+```source /etc/lsb-release```<br/>
+```echo "deb https://repos.influxdata.com/${DISTRIB_ID,,} ${DISTRIB_CODENAME} stable" | sudo tee /etc/apt/sources.list.d/influxdb.list```<br/>
 
-Install InfluxDB:
+Install InfluxDB:<br/>
 ```sudo apt-get update && sudo apt-get install influxdb```
 
-Start InfluxDB: 
+Start InfluxDB: <br/>
 ```sudo service influxdb start```
 
-Connect to InfluxDB using commandline:
+To connect to and check InfluxDB using commandline:<br/>
 ```influx```
 
 ### Application
