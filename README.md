@@ -61,23 +61,39 @@ publisher.py: It imports a ToBroker class which exposes the above mentioned APIs
 application uses two APIs register_pub and publish to register and publish values over the registered
 topic. It accepts a command-ine argument for the topic.
 
+#### Ownership strength
+The ownership strength for a topic defines the strength of the publisher for a particular topic. Only one publisher can publish on a particular topic at a time. By default, all publishers have zero ownership strength.<br/>  
+You can provide an argument ownership strength=  to register_pub API. <br/>
+For e.g. ```register_pub(topic="Temperature", ownership_strength=5)```
+
+
+#### History QoS
+
+We use a database to maintain the history of assigned samples. The samples can be provided as follows:<br/>
+```register_pub(topic="Temperature", samples=5```) or <br/>
+```register_sub(topic="Temperature", samples=5```)<br/>
+
 To run the publisher.py:
 
-```python3 publisher.py <topicname>```
-For e.g. ```python3 publisher.py Temperature```
+```python3 publisher.py <topicname> <ownership_strength>```
+
+For e.g. ```python3 publisher.py Temperature 5```
+
 
 subscriber.py: The subscriber application also uses ToBroker class and calls on two APIs, namely
 register_sub and notify. It also accepts a command-line argument for the topic.
 
 To run the subscriber.py:
 
-```python3 subscriber.py <topicname> <Option = History Samples on the topic>```
+```python3 subscriber.py <topicname> <samples>```
+
+For e.g. ```python3 subscriber.py Temperature 10```
+
+  
+```Note: ``` The subscriber cannot have more samples than what the current publisher owns. By default, publishers and subscribers don't have history enabled.
 
 config.ini: The configuration is read from this file. You may change IP address and ports depending upon the machine your broker is running.
 
 ```Note: ``` Always run the broker application first. Doing otherwise may lead to an unexpected behaviour. 
 
-### Future work
-##### Performance Measurement
-   We plan to add several other performance monitoring parameters such as CPU utilization, Latency v/s Publisher and Latency v/s Subscriber to better gauge the performance of our application.
 
