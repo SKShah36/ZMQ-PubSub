@@ -2,12 +2,14 @@
 This project provides a wrapper around zmq APIs for publish-subscribe application with zookeeper facilities.
 
 ## Implementation
-In our approach the zookeeper coordinates the communication between the brokers, publishers and subsciribers. From the various brokers, a single broker acquires the lock to create the leader node while the other brokers wait. When the leader broker dies, the zookeeper allows one of the remaining brokers to become the leader.
+In our approach the zookeeper coordinates the communication between the brokers, publishers and subsciribers. From the various brokers, a single broker acquires the lock to create the leader node while the other brokers wait. When the leader broker dies, the zookeeper allows one of the remaining brokers to become the leader. In addition to this the zookeeper assigns ownership strengths to the publishers for each topic to reduce the contention between various publishers publishing on the same topic. For each topic, only the messages published by the maximum ownership strength publisher is relayed to the subscribers. On top of this, the zookeeper also keeps message history on each topic, which the subscriber can demand during registration with the zookeeper. The maximum number of samples available is contingent on the Publisher with the maximum ownership strength for the particular topic.
 
 #### Zookeeper responsibilities:
 1. Appoints a leader broker.
 2. Maintains meta-data for all the brokers, publishers and subscribers.
 3. Uses watch-mechanism to monitor live status of all the nodes.
+4. Assign ownership strength to the publishers on each topic.
+5. Provide message history to the subscribers on the requested topic.
 
 ## Installation
 To clone only this branch: 
@@ -53,45 +55,13 @@ register_sub and notify. It also accepts a command-line argument for the topic.
 
 To run the subscriber.py:
 
-```python3 subscriber.py <topicname>```
+```python3 subscriber.py <topicname> <Option = History Samples on the topic>```
 
 config.ini: The configuration is read from this file. You may change IP address and ports depending upon the machine your broker is running.
 
 ```Note: ``` Always run the broker application first. Doing otherwise may lead to an unexpected behaviour. 
 
-### Performance Test
-
-#### Latency
-We calculate average latency vs message count(100 in each case) across three different configurations:
-1. Single publisher - Ten subscribers
-
-    ![Alt text](./Performance_Measurement/Performance_Log/latency_data_1x10/1x10.png?raw=true "CountvLatency-1x10") 
-       
-2. Single publisher - Hundred Subscribers
-
-     ![Alt text](./Performance_Measurement/Performance_Log/latency_data_1x100/1x100.png?raw=true "CountvLatency-1x100") 
-    
-3. Ten publishers - single subscriber
-
-     ![Alt text](./Performance_Measurement/Performance_Log/latency_data_10x1/10x1.png?raw=true "CountvLatency-10x1") 
-     
-4. Ten publishers - Ten subscribers
-
-     ![Alt text](./Performance_Measurement/Performance_Log/latency_data_10x10/10x10.png?raw=true "CountvLatency-10x10")
-    
-##### Observations
-1. In the first graph for single publisher and ten subscribers we can observe that with number of subscribers greater than that of publishers latency drops sharply and continues to decrease gradually from there on.
-2. In the second graph for single publisher and hundred subscribers we can observe that as initially there are jitters but once the message count increases and the application stabilizes, the latency gradually decreases and hence the curve smoothens out.
-3. From the third graph for ten publishers and single subscribers it is evident that the latency increases linearly as the message count increases.
-4. From the fourth graph for ten publishers and ten subscribers it is evident that the latency increases linearly as the message count increases.
-
-This behaviour is analogous to the High Production - Low Consumption Problem.
-
 ### Future work
 ##### Performance Measurement
    We plan to add several other performance monitoring parameters such as CPU utilization, Latency v/s Publisher and Latency v/s Subscriber to better gauge the performance of our application.
 
-##### Ownership Strength
-   The information from the publisher with the highest ownership strength gets relayed to the subscribers.
-##### History
-   Store the last N-messages published on a topic.
