@@ -29,6 +29,22 @@ For download and install instructions go to [zookeeper](https://zookeeper.apache
 - To start the zookeeper navigate to the zookeeper directory (eg. zookeeper-3.4.12)
 - ```bin/zkServer.sh start```. This command starts the zookeeper server. Make sure the port in the configuration file is 2181.
 
+### Start InfluxDB
+
+We have used InfluxDB to implement the history service in our application. Use the following instructions to download and install the InfluxDB for Ubuntu: 
+```curl -sL https://repos.influxdata.com/influxdb.key | sudo apt-key add -```
+```source /etc/lsb-release```
+```echo "deb https://repos.influxdata.com/${DISTRIB_ID,,} ${DISTRIB_CODENAME} stable" | sudo tee /etc/apt/sources.list.d/influxdb.list```
+
+Install InfluxDB:
+```sudo apt-get update && sudo apt-get install influxdb```
+
+Start InfluxDB: 
+```sudo service influxdb start```
+
+Connect to InfluxDB using commandline:
+```influx```
+
 ### Application
 
 The main library is called CS6381.py We provide three sample applications: broker.py,
